@@ -1,0 +1,17 @@
+allowed_services:
+  - nginx
+  - docker
+  - mysql
+
+policies:
+  - name: high_cpu_nginx
+    when:
+      metric: cpu_usage
+      over_percent: 90
+      for_seconds: 300
+    then:
+      - action: restart_service
+        args: { svc: "nginx" }
+      - action: notify
+        args:
+          message: "CPU>90% 5min. Nginx redémarré."
