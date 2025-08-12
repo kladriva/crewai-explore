@@ -1,7 +1,16 @@
 FROM python:3.11-slim
-WORKDIR /app
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-CMD ["python", "crew.py"]
+
+# On travaille hors du dossier "app" pour traiter "app" comme un package racine
+WORKDIR /workspace
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Ajoute /workspace au PYTHONPATH pour que "import app.*" fonctionne
+ENV PYTHONPATH=/workspace
+
+# Copie le contenu de app/ dans /workspace/app
+COPY . /workspace/app
+
+# Installe les deps depuis /workspace/app/requirements.txt
+RUN pip install --no-cache-dir -r /workspace/app/requirements.txt
+
+# Lance le module "app.crew" (et pas un fichier)
+CMD ["python", "-m", "app.crew"]
