@@ -46,7 +46,7 @@ services:
     command:
       - '--path.rootfs=/host'
     volumes:
-      - '/:/host:ro,rslave'
+      - '/:/host:ro'
     ports:
       - '9110:9110'
 
