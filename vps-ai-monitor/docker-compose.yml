@@ -29,5 +29,20 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
 
+  ai_agent:
+    build: ./app
+    container_name: ai_agent
+    depends_on:
+      - prometheus
+    environment:
+      - PROM_URL=http://prometheus:9090
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+    env_file:
+      - ./app/.env
+    restart: unless-stopped
+
 volumes:
   grafana-data:

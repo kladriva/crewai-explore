@@ -1,13 +1,13 @@
 import requests
 
 class PromClient:
-    def __init__(self, base_url="http://localhost:9090"):
-      self.base_url = base_url
-
+    def __init__(self, base_url=None):
+        self.base_url = base_url or os.getenv("PROM_URL", "http://localhost:9091")
+    
     def query(self, q: str):
-      r = requests.get(f"{self.base_url}/api/v1/query", params={'query': q}, timeout=5)
-      r.raise_for_status()
-      return r.json()['data']['result']
+        r = requests.get(f"{self.base_url}/api/v1/query", params={'query': q}, timeout=5)
+        r.raise_for_status()
+        return r.json()['data']['result']
 
     # Exemples de helpers
     def cpu_usage(self):
