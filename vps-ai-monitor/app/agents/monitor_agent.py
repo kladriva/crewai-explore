@@ -18,5 +18,5 @@ class MonitorAgent:
         mem = self.prom.mem_usage()
         disk = self.prom.disk_usage_root()
         logs = tail_journal(lines=80)
-        
+
         return {"cpu": cpu, "mem": mem, "disk": disk, "logs_tail": logs[-5:]}

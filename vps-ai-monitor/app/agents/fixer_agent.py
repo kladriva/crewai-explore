@@ -2,7 +2,7 @@ import time
 import yaml
 from pathlib import Path
 from crewai import Agent
-from tools.actions import Actions
+from app.tools.actions import Actions
 
 class FixerAgent:
     def __init__(self, llm, rules_path=None):
