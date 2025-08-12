@@ -1,0 +1,15 @@
+[Unit]
+Description=VPS AI Monitor (CrewAI)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/vps-ai-monitor/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/vps-ai-monitor/app/.venv/bin/python crew.py
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
