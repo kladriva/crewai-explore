@@ -5,21 +5,25 @@ import yaml
 
 class Actions:
     def __init__(self, rules_path="rules.yaml"):
-        self.rules = {"allowed_services": [], "policies": []}
+        self.rules = {"allowed_services": [], "allowed_containers": [], "policies": []}
         try:
             p = Path(rules_path)
             if p.is_file():
                 with open(p, "r") as f:
                     self.rules = yaml.safe_load(f) or self.rules
         except Exception:
-            # fallback silencieux
             pass
 
     def restart_service(self, svc: str) -> str:
         if svc not in self.rules.get("allowed_services", []):
             return f"Service {svc} non autorisé"
-        r = subprocess.run(["systemctl", "restart", svc], capture_output=True, text=True)
-        return r.stdout or r.stderr or f"Restart {svc} exécuté."
+        try:
+            r = subprocess.run(["systemctl", "restart", svc], capture_output=True, text=True)
+            return r.stdout or r.stderr or f"Restart {svc} exécuté."
+        except FileNotFoundError:
+            return "systemctl non disponible dans ce conteneur"
+        except Exception as e:
+            return f"Echec restart service {svc}: {e}"
 
     def cleanup_logs(self) -> str:
         subprocess.run(["journalctl", "--vacuum-time=7d"], check=False)
