@@ -7,18 +7,41 @@ import {
 type Point = { time: string; value: number };
 type Snapshot = { cpu?: number; mem?: number; disk?: number };
 
-const PALETTE = {
-  cpu:  { stroke: "#f59e0b", chip: "bg-amber-500",  border: "border-amber-200",  gradFrom: "from-amber-50",  gradVia: "via-amber-50/60"  },
-  mem:  { stroke: "#06b6d4", chip: "bg-cyan-500",   border: "border-cyan-200",   gradFrom: "from-cyan-50",   gradVia: "via-cyan-50/60"   },
-  disk: { stroke: "#8b5cf6", chip: "bg-violet-500", border: "border-violet-200", gradFrom: "from-violet-50", gradVia: "via-violet-50/60" },
+const DEFAULT_API = import.meta.env.PROD ? "/api" : "http://localhost:8000";
+
+// Seuils par métrique (editable)
+const THRESHOLDS: Record<"cpu" | "mem" | "disk", { warn: number; crit: number }> = {
+  cpu:  { warn: 70, crit: 90 },
+  mem:  { warn: 80, crit: 90 },
+  disk: { warn: 80, crit: 90 },
+};
+type Sev = "ok" | "warn" | "crit";
+const sevOf = (metric: keyof typeof THRESHOLDS, v?: number): Sev => {
+  if (!isFinite(v ?? NaN)) return "ok";
+  const { warn, crit } = THRESHOLDS[metric];
+  if ((v ?? 0) >= crit) return "crit";
+  if ((v ?? 0) >= warn) return "warn";
+  return "ok";
 };
 
-const DEFAULT_API = import.meta.env.PROD ? "/api" : "http://localhost:8000";
+// Couleurs dynamiques pour KPI (texte + chip) selon la sévérité
+const SEV_STYLE: Record<Sev, { text: string; chip: string }> = {
+  ok:   { text: "text-emerald-700", chip: "bg-emerald-500" },
+  warn: { text: "text-amber-600",   chip: "bg-amber-500"   },
+  crit: { text: "text-rose-600",    chip: "bg-rose-500"    },
+};
+
+// Couleurs des graphes (on reste pastel par métrique)
+const CHART_STYLE = {
+  cpu:  { stroke: "#f59e0b", border: "border-amber-200",  from: "from-amber-50",  via: "via-amber-50/60"  },
+  mem:  { stroke: "#06b6d4", border: "border-cyan-200",   from: "from-cyan-50",   via: "via-cyan-50/60"   },
+  disk: { stroke: "#8b5cf6", border: "border-violet-200", from: "from-violet-50", via: "via-violet-50/60" },
+};
 
 const fmtPct = (n?: number) =>
   typeof n === "number" && isFinite(n) ? `${n.toFixed(1)}%` : "—";
 
-const tsToLabel = (ts: number) =>
+const toLabel = (ts: number) =>
   new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, ms = 7000) {
@@ -28,9 +51,10 @@ function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, ms =
   return fetch(input, merged).finally(() => clearTimeout(id));
 }
 
-// --- composant ---
+type EventItem = { time: string; message: string; severity?: Sev; source?: "api" | "local" };
+
 export default function MonitoringConsole() {
-  // état
+  // --- état de page ---
   const [apiUrl, setApiUrl] = useState(localStorage.getItem("apiUrl") || DEFAULT_API);
   const [apiKey, setApiKey] = useState(localStorage.getItem("apiKey") || "");
   const [minutes, setMinutes] = useState(15);
@@ -40,6 +64,15 @@ export default function MonitoringConsole() {
   const [cpu, setCpu] = useState<Point[]>([]);
   const [mem, setMem] = useState<Point[]>([]);
   const [disk, setDisk] = useState<Point[]>([]);
+
+  // suivi de sévérité précédente pour détecter franchissements
+  const [prevSev, setPrevSev] = useState<{ cpu: Sev; mem: Sev; disk: Sev }>({
+    cpu: "ok", mem: "ok", disk: "ok",
+  });
+
+  // événements (API si dispo + locaux)
+  const [events, setEvents] = useState<EventItem[]>([]);
+
   const [target, setTarget] = useState("nginx");
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -52,21 +85,39 @@ export default function MonitoringConsole() {
   );
   const reqInit = useCallback((): RequestInit => (headersInit ? { headers: headersInit } : {}), [headersInit]);
 
-  // --- fetchers
+  // --- fetch snapshot + history ---
   async function fetchSnapshot() {
     const r = await fetchWithTimeout(`${apiUrl}/api/snapshot`, reqInit());
     const j = await r.json();
     setSnap({ cpu: j.cpu, mem: j.mem, disk: j.disk });
+
+    // détection des franchissements -> événement local
+    const sev = {
+      cpu: sevOf("cpu", j.cpu),
+      mem: sevOf("mem", j.mem),
+      disk: sevOf("disk", j.disk),
+    };
+    (["cpu", "mem", "disk"] as const).forEach((m) => {
+      if (sev[m] === "crit" && prevSev[m] !== "crit") {
+        setEvents((E) => [
+          {
+            time: new Date().toLocaleTimeString(),
+            message: `Seuil critique atteint: ${m.toUpperCase()} = ${fmtPct(j[m as keyof Snapshot] as number)}`,
+            severity: "crit",
+            source: "local",
+          },
+          ...E,
+        ]);
+      }
+    });
+    setPrevSev(sev);
   }
 
-  // <— BUG FIX: l’API renvoie `result`, pas `series`. On gère les deux.
+  // l’API renvoie .result[0].values (format Prometheus); on gère aussi .series[0].values.
   function parseHistory(j: any): Point[] {
-    const values =
-      j?.result?.[0]?.values ??
-      j?.series?.[0]?.values ??
-      [];
-    return values
-      .map((p: any[]) => ({ time: tsToLabel(Number(p[0])), value: Number(p[1]) }))
+    const arr = j?.result?.[0]?.values ?? j?.series?.[0]?.values ?? [];
+    return arr
+      .map((p: any[]) => ({ time: toLabel(Number(p[0])), value: Number(p[1]) }))
       .filter((p: Point) => isFinite(p.value));
   }
 
@@ -81,6 +132,25 @@ export default function MonitoringConsole() {
     if (metric === "disk") setDisk(pts);
   }
 
+  // événements côté API si dispo
+  async function tryFetchEvents() {
+    try {
+      const r = await fetchWithTimeout(`${apiUrl}/api/events?limit=20`, reqInit(), 5000);
+      if (!r.ok) return; // silencieux si 404
+      const data = await r.json();
+      // normalisation légère: {time, message, severity?}
+      const list: EventItem[] = Array.isArray(data)
+        ? data.map((x: any) => ({
+            time: x.time || x.ts || new Date().toLocaleTimeString(),
+            message: x.message || x.msg || JSON.stringify(x),
+            severity: (x.severity as Sev) || undefined,
+            source: "api",
+          }))
+        : [];
+      if (list.length) setEvents((E) => [...list, ...E].slice(0, 50));
+    } catch {/* ignore si endpoint absent */}
+  }
+
   async function refreshAll() {
     setLoading(true);
     try {
@@ -89,11 +159,13 @@ export default function MonitoringConsole() {
         fetchHistory("cpu"),
         fetchHistory("mem"),
         fetchHistory("disk"),
+        tryFetchEvents(),
       ]);
     } finally {
       setLoading(false);
     }
   }
+
   useEffect(() => {
     refreshAll();
     const id = setInterval(refreshAll, 15000);
@@ -112,6 +184,15 @@ export default function MonitoringConsole() {
         body: JSON.stringify({ name: target }),
       });
       const j = await r.json();
+      setEvents((E) => [
+        {
+          time: new Date().toLocaleTimeString(),
+          message: `Redémarrage demandé pour "${target}": ${j.result || "OK"}`,
+          severity: "warn",
+          source: "api",
+        },
+        ...E,
+      ]);
       alert(j.result || JSON.stringify(j));
     } catch (e: any) {
       alert("Action error: " + (e?.message || e));
@@ -122,16 +203,16 @@ export default function MonitoringConsole() {
 
   const resetApiUrl = () => setApiUrl(DEFAULT_API);
 
-  // --- UI
+  // ---- RENDER ----
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+    <div className="min-h-screen bg-slate-50 flex justify-center">
+      <main className="w-full max-w-screen-2xl px-6 py-8 space-y-6">
         <h1 className="text-5xl font-extrabold tracking-tight text-slate-800 text-center mb-2">
           VPS Monitoring Console
         </h1>
 
         {/* Barre de contrôle */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
           <Field label="API URL">
             <div className="flex gap-2">
               <input
@@ -142,7 +223,7 @@ export default function MonitoringConsole() {
               />
               <button
                 onClick={resetApiUrl}
-                className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium
+                className="rounded-md px-3 py-2 text-sm font-medium
                            bg-slate-200 hover:bg-slate-300 active:bg-slate-400 transition-colors"
                 title="Revenir à la valeur par défaut"
               >
@@ -160,63 +241,61 @@ export default function MonitoringConsole() {
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Fenêtre">
-              <select
-                className="border rounded-md p-2 w-full focus:outline-none focus:ring-2 focus:ring-sky-400"
-                value={minutes}
-                onChange={(e) => setMinutes(parseInt(e.target.value))}
-              >
-                <option value={15}>15 min</option>
-                <option value={60}>1 h</option>
-                <option value={180}>3 h</option>
-                <option value={720}>12 h</option>
-              </select>
-            </Field>
+          <Field label="Fenêtre">
+            <select
+              className="border rounded-md p-2 w-full focus:outline-none focus:ring-2 focus:ring-sky-400"
+              value={minutes}
+              onChange={(e) => setMinutes(parseInt(e.target.value))}
+            >
+              <option value={15}>15 min</option>
+              <option value={60}>1 h</option>
+              <option value={180}>3 h</option>
+              <option value={720}>12 h</option>
+            </select>
+          </Field>
 
-            {/* Bouton VERT fiable */}
-            <div className="flex items-end">
-              <button
-                onClick={refreshAll}
-                disabled={loading}
-                className="appearance-none w-full rounded-md px-4 py-2 font-medium text-white
-                           bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
-                           disabled:bg-emerald-400 disabled:text-white disabled:opacity-100
-                           shadow-sm transition-colors"
-              >
-                {loading ? "…" : "Rafraîchir"}
-              </button>
-            </div>
+          {/* Bouton bien vert, même en disabled */}
+          <div className="flex items-end">
+            <button
+              onClick={refreshAll}
+              disabled={loading}
+              className="inline-flex items-center justify-center w-full rounded-lg px-4 py-2
+                         font-semibold text-white shadow-sm ring-1 ring-emerald-200
+                         bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
+                         disabled:opacity-60 disabled:hover:bg-emerald-600 disabled:cursor-not-allowed"
+            >
+              {loading ? "…" : "Rafraîchir"}
+            </button>
           </div>
         </div>
 
-        {/* KPIs */}
+        {/* KPIs (couleur dynamique selon le taux) */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Kpi title="CPU" value={fmtPct(snap.cpu)} barClass={PALETTE.cpu.chip} />
-          <Kpi title="Mémoire" value={fmtPct(snap.mem)} barClass={PALETTE.mem.chip} />
-          <Kpi title="Disque /" value={fmtPct(snap.disk)} barClass={PALETTE.disk.chip} />
+          <Kpi metric="cpu"  value={snap.cpu} />
+          <Kpi metric="mem"  value={snap.mem} />
+          <Kpi metric="disk" value={snap.disk} />
         </div>
 
-        {/* Graphiques */}
+        {/* Graphes */}
         <div className="grid gap-6 xl:grid-cols-3">
           <Timeseries
-            title="CPU (%)" data={cpu}
-            stroke={PALETTE.cpu.stroke} border={PALETTE.cpu.border}
-            from={PALETTE.cpu.gradFrom} via={PALETTE.cpu.gradVia} gid="cpu"
+            title="CPU (%)"   data={cpu}
+            stroke={CHART_STYLE.cpu.stroke}  border={CHART_STYLE.cpu.border}
+            from={CHART_STYLE.cpu.from}      via={CHART_STYLE.cpu.via} gid="cpu"
           />
           <Timeseries
             title="Mémoire (%)" data={mem}
-            stroke={PALETTE.mem.stroke} border={PALETTE.mem.border}
-            from={PALETTE.mem.gradFrom} via={PALETTE.mem.gradVia} gid="mem"
+            stroke={CHART_STYLE.mem.stroke}  border={CHART_STYLE.mem.border}
+            from={CHART_STYLE.mem.from}      via={CHART_STYLE.mem.via} gid="mem"
           />
           <Timeseries
-            title="Disque (%)" data={disk}
-            stroke={PALETTE.disk.stroke} border={PALETTE.disk.border}
-            from={PALETTE.disk.gradFrom} via={PALETTE.disk.gradVia} gid="disk"
+            title="Disque (%)"  data={disk}
+            stroke={CHART_STYLE.disk.stroke} border={CHART_STYLE.disk.border}
+            from={CHART_STYLE.disk.from}     via={CHART_STYLE.disk.via} gid="disk"
           />
         </div>
 
-        {/* Actions */}
+        {/* Actions manuelles */}
         <div className="rounded-xl p-4 border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col sm:flex-row gap-3 items-end">
             <div className="grow">
@@ -233,13 +312,50 @@ export default function MonitoringConsole() {
             <button
               onClick={restartContainer}
               disabled={actionBusy}
-              className="appearance-none rounded-md px-4 py-2 font-medium text-white
+              className="inline-flex items-center justify-center rounded-lg px-4 py-2
+                         font-semibold text-white shadow-sm ring-1 ring-emerald-200
                          bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
-                         disabled:bg-emerald-400 disabled:opacity-60 shadow-sm"
+                         disabled:opacity-60 disabled:hover:bg-emerald-600"
             >
               {actionBusy ? "…" : "Redémarrer le conteneur"}
             </button>
           </div>
+        </div>
+
+        {/* Evénements (actions auto + franchissements locaux) */}
+        <div className="rounded-xl p-4 border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-slate-700">Événements récents</h2>
+            <button
+              onClick={() => setEvents([])}
+              className="text-xs rounded px-2 py-1 bg-slate-100 hover:bg-slate-200"
+            >
+              Effacer
+            </button>
+          </div>
+          {events.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Aucun événement pour l’instant. Si votre API expose <code>/api/events</code>,
+              ils apparaîtront ici. Sinon, les franchissements de seuils critiques sont journalisés localement.
+            </p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {events.slice(0, 20).map((e, i) => (
+                <li key={i} className="flex gap-2 items-start">
+                  <span className="text-xs text-slate-400 mt-[2px]">{e.time}</span>
+                  <span
+                    className={
+                      e.severity === "crit" ? "text-rose-600" :
+                      e.severity === "warn" ? "text-amber-600" : "text-slate-700"
+                    }
+                  >
+                    {e.message}
+                    {e.source ? <span className="text-slate-400"> · {e.source}</span> : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <p className="text-xs text-center text-slate-500">
@@ -259,12 +375,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Kpi({ title, value, barClass }: { title: string; value?: string; barClass: string }) {
+function Kpi({ metric, value }: { metric: "cpu" | "mem" | "disk"; value?: number }) {
+  const sev = sevOf(metric, value);
+  const { text, chip } = SEV_STYLE[sev];
   return (
     <div className="rounded-xl p-4 border border-slate-200 bg-white shadow-sm">
-      <div className="text-sm text-slate-600 mb-2">{title}</div>
-      <div className={`h-1.5 w-16 rounded-full mb-3 ${barClass}`} />
-      <div className="text-3xl font-semibold text-slate-900">{value || "—"}</div>
+      <div className="text-sm text-slate-600 mb-2">
+        {metric === "cpu" ? "CPU" : metric === "mem" ? "Mémoire" : "Disque /"}
+      </div>
+      <div className={`h-1.5 w-16 rounded-full mb-3 ${chip}`} />
+      <div className={`text-3xl font-semibold ${text}`}>{fmtPct(value)}</div>
     </div>
   );
 }
