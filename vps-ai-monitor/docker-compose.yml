@@ -57,7 +57,9 @@ services:
     ports:
       - "8091:80"          
     depends_on:
-      - ai_agent     
+      - ai_agent    
+    extra_hosts:
+      - host.docker.internal=host-gateway 
 
   node_exporter:
     image: prom/node-exporter:latest
