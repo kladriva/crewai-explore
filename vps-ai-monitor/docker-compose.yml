@@ -34,12 +34,25 @@ services:
       - READ_JOURNAL=0
       - LOG_LEVEL=INFO
       - LOOP_INTERVAL=15
+      - API_TOKEN=USER_INTERFACE
     env_file:
       - ./app/.env
     restart: unless-stopped
     volumes:
       - ./app/rules.yaml:/workspace/app/rules.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: vps-ai-monitor-ui
+    ports:
+      - "8090:80"          
+    depends_on:
+      - ai_agent     
 
   node_exporter:
     image: prom/node-exporter:latest

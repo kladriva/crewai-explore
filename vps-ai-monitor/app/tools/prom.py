@@ -10,6 +10,15 @@ class PromClient:
         r = requests.get(f"{self.base_url}/api/v1/query", params={'query': q}, timeout=5)
         r.raise_for_status()
         return r.json()['data']['result']
+    
+    def query_range(self, q: str, start: int, end: int, step: str):
+        r = requests.get(
+            f"{self.base_url}/api/v1/query_range",
+            params={'query': q, 'start': start, 'end': end, 'step': step},
+            timeout=12
+        )
+        r.raise_for_status()
+        return r.json().get("data", {}).get("result", [])
 
     # helpers (exemples)
     def cpu_usage(self):

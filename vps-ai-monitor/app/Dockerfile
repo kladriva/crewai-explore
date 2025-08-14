@@ -13,4 +13,4 @@ COPY . /workspace/app
 RUN pip install --no-cache-dir -r /workspace/app/requirements.txt
 
 # Lance le module "app.crew" (et pas un fichier)
-CMD ["python", "-m", "app.crew"]
+CMD ["/bin/sh","-lc","python -m app.crew & exec uvicorn app.api:app --host 0.0.0.0 --port 8000"]
