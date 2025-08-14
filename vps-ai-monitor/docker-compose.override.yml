@@ -1,5 +1,4 @@
 services:
-  ai_agent:
-    ports: []          
+  ai_agent:         
     expose:
       - "8000"        
