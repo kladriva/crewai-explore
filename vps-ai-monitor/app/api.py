@@ -1,57 +1,72 @@
-import os
-from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+# app/api.py
+from fastapi import FastAPI, HTTPException
+import os, time, asyncio
+import httpx
 
-# ---- déjà présent ----
 app = FastAPI(title="VPS AI Monitor API")
-API_TOKEN = os.getenv("API_TOKEN", "").strip()
 
-def check_token(x_api_key: str | None):
-    if API_TOKEN and (x_api_key or "").strip() != API_TOKEN:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+PROM = os.getenv("PROM_URL", "http://prometheus:9090")
+
+async def prom_query(q: str):
+    async with httpx.AsyncClient(timeout=8) as c:
+        r = await c.get(f"{PROM}/api/v1/query", params={"query": q})
+        r.raise_for_status()
+        j = r.json()
+        if j.get("status") != "success" or not j["data"]["result"]:
+            return None
+        try:
+            return float(j["data"]["result"][0]["value"][1])
+        except Exception:
+            return None
+
+def prom_expr(metric: str) -> str:
+    if metric == "cpu":
+        return '100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)'
+    if metric == "mem":
+        return '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'
+    if metric == "disk":
+        return ('100 * (1 - (sum by (instance) (node_filesystem_free_bytes'
+                '{mountpoint="/",fstype!~"tmpfs|overlay"}) / '
+                'sum by (instance) (node_filesystem_size_bytes'
+                '{mountpoint="/",fstype!~"tmpfs|overlay"})))')
+    raise HTTPException(400, "unknown metric")
 
 @app.get("/api/health")
-def health():
+async def health():
     return {"status": "ok"}
 
-# ---- nouveau : monitoring / snapshot ----
-try:
-    # importe le client Prometheus de ton POC
-    from app.tools.prom import PromClient
-except Exception as e:
-    PromClient = None
-
 @app.get("/api/snapshot")
-def get_snapshot(x_api_key: str | None = Header(None, alias="X-API-Key")):
-    check_token(x_api_key)
-    if PromClient is None:
-        raise HTTPException(500, "Prometheus client not available")
-    prom = PromClient()
-    return {
-        "cpu": prom.cpu_usage(),     # % CPU
-        "mem": prom.mem_usage(),     # % mémoire
-        "disk": prom.disk_usage(),   # % disque
-    }
+async def snapshot():
+    cpu_q = prom_expr("cpu")
+    mem_q = prom_expr("mem")
+    disk_q = prom_expr("disk")
+    cpu, mem, disk = await asyncio.gather(
+        prom_query(cpu_q), prom_query(mem_q), prom_query(disk_q)
+    )
+    return {"cpu": cpu, "mem": mem, "disk": disk}
 
-# ---- nouveau : actions (restart container) ----
-class RestartReq(BaseModel):
-    name: str  # nom du conteneur à redémarrer (ex: "prometheus")
+@app.get("/api/history")
+async def history(metric: str, minutes: int = 60, step: str = "15s"):
+    q = prom_expr(metric)
+    now = int(time.time())
+    start = now - minutes * 60
+    async with httpx.AsyncClient(timeout=None) as c:
+        r = await c.get(
+            f"{PROM}/api/v1/query_range",
+            params={"query": q, "start": start, "end": now, "step": step},
+        )
+        r.raise_for_status()
+        return r.json()["data"]
 
+# (facultatif) action de redémarrage d’un conteneur si /var/run/docker.sock est monté
 @app.post("/api/actions/restart-container")
-def restart_container(
-    body: RestartReq,
-    x_api_key: str | None = Header(None, alias="X-API-Key")
-):
-    check_token(x_api_key)
-    try:
-        import docker  # SDK officiel
-    except Exception:
-        raise HTTPException(500, "Docker SDK not installed")
-
-    try:
-        cli = docker.DockerClient(base_url="unix:///var/run/docker.sock")
-        c = cli.containers.get(body.name)
-        c.restart()
-        return {"ok": True, "container": body.name}
-    except Exception as e:
-        raise HTTPException(500, f"Restart failed: {e}")
+async def restart_container(payload: dict):
+    name = (payload or {}).get("name")
+    if not name:
+        raise HTTPException(400, "missing 'name'")
+    # version 'docker cli' simple; remplace par docker SDK si tu préfères
+    import subprocess
+    p = subprocess.run(["docker", "restart", name], capture_output=True, text=True)
+    if p.returncode != 0:
+        raise HTTPException(500, p.stderr.strip() or "restart failed")
+    return {"result": p.stdout.strip() or "restarted"}
