@@ -50,7 +50,6 @@ services:
       dockerfile: Dockerfile
     image: vps-ai-monitor-ui
     ports:
-      - "8090:80" 
       - "8091:80"          
     depends_on:
       - ai_agent     
