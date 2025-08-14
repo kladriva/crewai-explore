@@ -43,6 +43,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8010:8000"
+    extra_hosts:
+      - host.docker.internal=host-gateway
 
   ui:
     build:
