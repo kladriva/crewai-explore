@@ -21,12 +21,8 @@ services:
       - grafana-data:/var/lib/grafana
 
   ai_agent:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    image: vps-ai-monitor-ai_agent
-    expose:
-      - "8000"
+    build: ./app
+    container_name: ai_agent
     depends_on:
       - prometheus
     environment:
@@ -39,7 +35,6 @@ services:
       - LOG_LEVEL=INFO
       - LOOP_INTERVAL=15
       - API_TOKEN=USER_INTERFACE
-      - PORT=8000
     env_file:
       - ./app/.env
     restart: unless-stopped
@@ -47,7 +42,7 @@ services:
       - ./app/rules.yaml:/workspace/app/rules.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "8000:8000"
+      - "8010:8000"
 
   ui:
     build:
