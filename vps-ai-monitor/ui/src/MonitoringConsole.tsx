@@ -209,4 +209,9 @@ function Timeseries({
       </div>
     </div>
   );
+}export default function App() {
+  return (
+    <MonitoringConsole />
+  );
 }
+
