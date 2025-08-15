@@ -253,16 +253,16 @@ export default function MonitoringConsole() {
           </Field>
           <div className="flex items-end">
             <button
-              onClick={refreshAll}
-              disabled={loading}
-              className="w-full rounded-md px-4 py-2 font-medium
-                         bg-emerald-600 text-white
-                         hover:bg-emerald-500 active:bg-emerald-700
-                         disabled:bg-emerald-400 disabled:text-white disabled:opacity-100 disabled:cursor-not-allowed
-                         shadow-sm transition-colors"
-            >
-              {loading ? "…" : "Rafraîchir"}
-            </button>
+                onClick={refreshAll}
+                disabled={loading}
+                className="w-full rounded-md px-4 py-2 font-medium
+                           !bg-emerald-600 text-white
+                           hover:!bg-emerald-500 active:!bg-emerald-700
+                           disabled:!bg-emerald-400 disabled:text-white disabled:opacity-100
+                           disabled:cursor-not-allowed shadow-sm transition-colors"
+              >
+                {loading ? "…" : "Rafraîchir"}
+              </button>
           </div>
         </div>
 
