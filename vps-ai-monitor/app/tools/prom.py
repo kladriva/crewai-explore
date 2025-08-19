@@ -3,7 +3,6 @@ import requests
 
 class PromClient:
     def __init__(self, base_url=None):
-        # utilise la variable d'env si présente (docker-compose la fournit)
         self.base_url = base_url or os.getenv("PROM_URL", "http://prometheus:9090")
 
     def query(self, q: str):

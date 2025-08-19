@@ -215,8 +215,8 @@ export default function MonitoringConsole() {
   const diskColor = colorFor("disk", snap.disk);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    
+      <div className="max-w-6xl mx-auto px-4 content-center py-8 space-y-6">
         <h1 className="text-5xl font-extrabold tracking-tight text-slate-800 text-center">
           VPS Monitoring Console
         </h1>
@@ -360,7 +360,6 @@ export default function MonitoringConsole() {
           Données: Prometheus • Actions: API FastAPI • Refresh auto 15s
         </p>
       </div>
-    </div>
   );
 }
 
@@ -411,7 +410,7 @@ function Timeseries({
   gid: string;
 }) {
   return (
-    <div className={`rounded-xl p-4 border ${border} bg-gradient-to-b ${from} ${via} to-white shadow-sm`}>
+    <div className={`min-w-0 rounded-xl p-4 border ${border} bg-gradient-to-b ${from} ${via} to-white shadow-sm`}>
       <div className="text-sm text-slate-700 mb-2">{title}</div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">

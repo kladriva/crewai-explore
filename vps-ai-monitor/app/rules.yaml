@@ -3,6 +3,19 @@ allowed_services:
   - docker
   - mysql
 
+allowed_cache:
+  nginx:
+    - /var/cache/nginx
+
+actions:
+  on_crit:
+    mem:
+      - clear_cache:
+          container: nginx
+          path: /var/cache/nginx
+      - restart_container: nginx
+      - notify: "Mémoire critique: purge cache nginx puis redémarrage"
+
 policies:
   - name: high_cpu_nginx
     when:

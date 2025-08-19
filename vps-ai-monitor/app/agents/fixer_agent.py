@@ -3,13 +3,13 @@ import yaml
 from pathlib import Path
 from crewai import Agent
 from app.tools.actions import Actions
+import time
 
 class FixerAgent:
-    def __init__(self, llm, rules_path=None):
-        # chemin du fichier à côté du code (app/rules.yaml)
-        base = Path(__file__).resolve().parents[1]  # => /workspace/app
-        rules_file = Path(rules_path) if rules_path else (base / "rules.yaml")
-        self.actions = Actions(str(rules_file))
+    def __init__(self, llm, rules_path: str = "rules.yaml"):
+        self.llm = llm
+        self.actions = Actions(rules_path)
+        
         self.agent = Agent(
             role="Remediator",
             goal="Appliquer des remédiations sûres, documentées et conformes aux règles.",
@@ -18,10 +18,50 @@ class FixerAgent:
             llm=llm
         )
 
+    def _derive_triggers(self, analysis: dict) -> set[str]:
+        triggers = set()
+        exp = (analysis.get("explanation") or "").lower()
+        if analysis.get("anomaly"):
+            if "cpu" in exp:
+                triggers.add("cpu_high")
+            if "mémoire" in exp or "memory" in exp:
+                triggers.add("mem_high")
+            if "disque" in exp or "disk" in exp:
+                triggers.add("disk_high")
+        return triggers
+
     def apply(self, analysis):
         results = []
-        if "CPU" in analysis["explanation"]:
-            # exemple d’action (voir note plus bas sur systemd dans un conteneur)
-            results.append(self.actions.restart_service("nginx"))
-            time.sleep(2)
+        triggers = self._derive_triggers(analysis)
+        rules = getattr(self.actions, "rules", {}) or {}
+
+        if not rules:
+            if "cpu_high" in triggers:
+                results.append(self.actions.restart_container("nginx"))
+            if "mem_high" in triggers:
+                results.append(self.actions.clear_cache(container="nginx", path="/var/cache/nginx"))
+            return results
+
+        for rule in rules.get("rules", []):
+            trig = rule.get("trigger")
+            if trig and trig in triggers:
+                for act in rule.get("actions", []):
+                    if isinstance(act, dict):
+                        if "restart_container" in act:
+                            name = act["restart_container"].get("name")
+                            results.append(self.actions.restart_container(name))
+                        elif "clear_cache" in act:
+                            p = act["clear_cache"] or {}
+                            results.append(self.actions.clear_cache(
+                                container=p.get("container"),
+                                path=p.get("path")
+                            ))
+                        elif "notify" in act:
+                            msg = act["notify"]
+                            results.append(self.actions.notify(msg))
+                        elif "log" in act:
+                            msg = act["log"]
+                            results.append(self.actions.log(msg))
+                time.sleep(1)  # petit délai entre lots d’actions
         return results
+

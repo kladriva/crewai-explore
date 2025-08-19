@@ -1,11 +1,15 @@
 import subprocess
 import shutil
+import subprocess
+import shlex
+import logging
 from pathlib import Path
 import yaml
 
 class Actions:
     def __init__(self, rules_path="rules.yaml"):
         self.rules = {"allowed_services": [], "allowed_containers": [], "policies": []}
+        self.allowed_cache = self.rules.get("allowed_cache", {})
         try:
             p = Path(rules_path)
             if p.is_file():
@@ -41,3 +45,40 @@ class Actions:
             except Exception:
                 pass
         return f"Nettoyage /tmp terminé, éléments supprimés: {count}"
+    
+    def clear_cache(self, container: str, path: str) -> dict:
+        """
+        Purge un répertoire de cache *dans* un conteneur Docker autorisé.
+        Sécurisé par whitelist: container + path doivent être autorisés.
+        """
+        logger = logging.getLogger("actions")
+        # contrôles de sécurité
+        if container not in self.allowed_containers:
+            msg = f"clear_cache refusé: conteneur '{container}' non autorisé"
+            logger.warning(msg)
+            return {"ok": False, "error": msg}
+
+        allowed_paths = set(self.allowed_cache.get(container, []))
+        if path not in allowed_paths:
+            msg = f"clear_cache refusé: chemin '{path}' non autorisé pour {container}"
+            logger.warning(msg)
+            return {"ok": False, "error": msg}
+
+        # commande sûre: on ne supprime que le contenu du dossier (pas le dossier)
+        cmd = f"sh -lc 'test -d {shlex.quote(path)} && find {shlex.quote(path)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {{}} +'"
+        try:
+            r = subprocess.run(
+                ["docker", "exec", container, "sh", "-lc", cmd],
+                capture_output=True, text=True, check=False
+            )
+            ok = (r.returncode == 0)
+            if ok:
+                logger.info(f"AUTO-ACTION clear_cache: {container}:{path}")
+                return {"ok": True, "action": f"clear_cache {container}:{path}", "stdout": r.stdout.strip()}
+            else:
+                logger.error(f"clear_cache échec ({container}:{path}) rc={r.returncode} stderr={r.stderr.strip()}")
+                return {"ok": False, "error": r.stderr.strip()}
+        except Exception as e:
+            logger.exception("clear_cache exception")
+            return {"ok": False, "error": str(e)}
+
