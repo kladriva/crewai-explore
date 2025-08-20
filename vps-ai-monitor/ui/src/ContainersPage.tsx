@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 
 type Port = { private: number; public?: number | null; protocol: string };
@@ -6,36 +5,12 @@ type Item = {
   id: string;
   name: string;
   image: string;
-  state: string;            
-  status?: string | null;   
+  state: string;            // e.g. "running" | "exited"
+  status?: string | null;   // libre
   ports: Port[];
-  first_deploy: string;     
+  first_deploy: string;
   last_start?: string | null;
 };
-
-/*function apiBase(): string {
-  // même logique que la page Monitoring : on lit localStorage
-  const base =
-    localStorage.getItem("apiUrl") ||
-    (import.meta.env.PROD ? "/api" : "http://localhost:8000");
-  return base.replace(/\/+$/, "");
-}*/
-
-/*async function apiJSON<T>(path: string, opt?: RequestInit): Promise<T> {
-  const base = apiBase();
-  const url = path.startsWith("/") ? base + path : base + "/" + path;
-
-  const headers: HeadersInit = { "Content-Type": "application/json" };
-  const apiKey = localStorage.getItem("apiKey");
-  if (apiKey) (headers as any)["X-API-Key"] = apiKey;
-
-  const r = await fetch(url, { ...opt, headers });
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    throw new Error(`${r.status} ${r.statusText} – ${t}`);
-  }
-  return r.json();
-}*/
 
 function fmtDate(s?: string | null): string {
   if (!s) return "—";
@@ -54,58 +29,55 @@ function badgeClass(state: string): string {
 export default function ContainersPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<Item[]>([]);
+  
   const [busyName, setBusyName] = useState<string | null>(null);
 
+  // --- base API (évite /api/api) -------------------------------------------
+  const rawApiUrl =
+    localStorage.getItem("apiUrl") ||
+    (import.meta.env.PROD ? "/api" : "http://localhost:8000");
+  const apiUrl = rawApiUrl.replace(/\/+$/, ""); // strip trailing slash
+  const base = /\/api$/.test(apiUrl) ? apiUrl : `${apiUrl}/api`;
 
-  const apiUrl = localStorage.getItem("apiUrl") || (import.meta.env.PROD ? "/api" : "http://localhost:8000");
   const apiKey = localStorage.getItem("apiKey") || "";
-  const base   = `${apiUrl}/api`;
   const headers: HeadersInit = apiKey ? { "X-API-Key": apiKey } : {};
 
+  // --- charge la liste ------------------------------------------------------
   async function load() {
     setLoading(true);
     try {
       const res = await fetch(`${base}/containers`, { headers });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
       const j = await res.json();
-      const list = Array.isArray(j) ? j : (j?.containers ?? j?.items ?? []);
-      setData(Array.isArray(list) ? list : []);
-      setItems(data);
+      const list: Item[] = Array.isArray(j) ? j : (j?.containers ?? j?.items ?? []);
+      setItems(Array.isArray(list) ? list : []);
     } catch (e) {
-      console.error(e);
-      setData([]);
+      console.error("containers load:", e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
   }
 
+  // --- start/stop/restart ---------------------------------------------------
   async function control(name: string, op: "start" | "stop" | "restart") {
-    setBusyName(name + op);
+    setBusyName(`${name}:${op}`);
     try {
-      const res = await fetch(`${base}/containers/${encodeURIComponent(name)}/${op}`, {
-        method: "POST",
-        headers
-      });
-      const j = await res.json();
-      if (!res.ok || j.ok === false) throw new Error(j.error || res.statusText);
+      const res = await fetch(
+        `${base}/containers/${encodeURIComponent(name)}/${op}`,
+        { method: "POST", headers }
+      );
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.ok === false) {
+        throw new Error(j?.error || res.statusText);
+      }
+      await load();
     } catch (e: any) {
-      alert(`Action ${op} sur ${name} a échoué: ${e?.message || e}`);
+      alert(`Action ${op} sur ${name} : ${e?.message || e}`);
     } finally {
-      setBusyName("");
-      load();
+      setBusyName(null);
     }
   }
-
-  /*async function load() {
-    setLoading(true);
-    try {
-      const data = await apiJSON<Item[]>("/api/containers");
-      setItems(data);
-    } finally {
-      setLoading(false);
-    }
-  }*/
 
   useEffect(() => {
     load();
@@ -113,33 +85,10 @@ export default function ContainersPage() {
     return () => clearInterval(id);
   }, [base, apiKey]);
 
-  /*useEffect(() => {
-    load();
-    const id = setInterval(load, 15000);
-    return () => clearInterval(id);
-  }, []);*/
-
-  /*async function toggle(name: string, running: boolean) {
-    setBusyName(name);
-    try {
-      const path = running
-        ? `/api/containers/${encodeURIComponent(name)}/stop`
-        : `/api/containers/${encodeURIComponent(name)}/start`;
-      await apiJSON(path, { method: "POST" });
-      await load();
-    } catch (e: any) {
-      alert("Action échouée: " + (e?.message || e));
-    } finally {
-      setBusyName(null);
-    }
-  }*/
-
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-slate-800">
-          Conteneurs Docker
-        </h2>
+        <h2 className="text-2xl font-semibold text-slate-800">Conteneurs Docker</h2>
         <button
           onClick={load}
           disabled={loading}
@@ -176,10 +125,12 @@ export default function ContainersPage() {
             {items.map((c) => {
               const running = c.state.toLowerCase() === "running";
               const ports =
-                c.ports && c.ports.length
+                c.ports?.length
                   ? c.ports
                       .map((p) =>
-                        p.public ? `${p.public}→${p.private}/${p.protocol}` : `${p.private}/${p.protocol}`
+                        p.public
+                          ? `${p.public}→${p.private}/${p.protocol}`
+                          : `${p.private}/${p.protocol}`
                       )
                       .join(", ")
                   : "—";
@@ -198,21 +149,29 @@ export default function ContainersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                        onClick={() => control(c.name, c.state.toLowerCase() === "running" ? "stop" : "start")}
-                        disabled={busyName === `${c.name}:${c.state.toLowerCase() === "running" ? "stop" : "start"}`}
-                        className={`rounded-md px-3 py-2 text-sm font-medium shadow-sm
-                            ${c.state.toLowerCase() === "running"
-                            ? "bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white"
-                            : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white"}
-                            disabled:opacity-60`}
-                        >
-                        {busyName?.startsWith(c.name + ":") ? "…" : (c.state.toLowerCase() === "running" ? "Arrêter" : "Lancer")}                                                                   
+                      onClick={() =>
+                        control(c.name, running ? "stop" : "start")
+                      }
+                      disabled={busyName === `${c.name}:${running ? "stop" : "start"}`}
+                      className={`rounded-md px-3 py-2 text-sm font-medium shadow-sm
+                        ${running
+                          ? "bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white"
+                          : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white"}
+                        disabled:opacity-60`}
+                    >
+                      {busyName?.startsWith(`${c.name}:`)
+                        ? "…"
+                        : running ? "Arrêter" : "Lancer"}
                     </button>
-                    <button onClick={() => control(c.name, "restart")}
-                        disabled={busyName === `${c.name}:restart`}
-                        className="ml-2 rounded-md px-3 py-2 text-sm font-medium bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white disabled:opacity-60"
-                        >
-                        {busyName === `${c.name}:restart` ? "…" : "Redémarrer"}
+
+                    <button
+                      onClick={() => control(c.name, "restart")}
+                      disabled={busyName === `${c.name}:restart`}
+                      className="ml-2 rounded-md px-3 py-2 text-sm font-medium
+                                 bg-slate-700 hover:bg-slate-600 active:bg-slate-800
+                                 text-white disabled:opacity-60"
+                    >
+                      {busyName === `${c.name}:restart` ? "…" : "Redémarrer"}
                     </button>
                   </td>
                 </tr>
