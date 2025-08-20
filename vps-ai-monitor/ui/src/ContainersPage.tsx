@@ -56,7 +56,7 @@ export default function ContainersPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Item[]>([]);
   const [busyName, setBusyName] = useState<string | null>(null);
-  const [busy,   setBusy]   = useState("");
+  
 
   const apiUrl = localStorage.getItem("apiUrl") || (import.meta.env.PROD ? "/api" : "http://localhost:8000");
   const apiKey = localStorage.getItem("apiKey") || "";
@@ -71,6 +71,7 @@ export default function ContainersPage() {
       const j = await res.json();
       const list = Array.isArray(j) ? j : (j?.containers ?? j?.items ?? []);
       setData(Array.isArray(list) ? list : []);
+      setItems(data);
     } catch (e) {
       console.error(e);
       setData([]);
@@ -80,7 +81,7 @@ export default function ContainersPage() {
   }
 
   async function control(name: string, op: "start" | "stop" | "restart") {
-    setBusy(name + op);
+    setBusyName(name + op);
     try {
       const res = await fetch(`${base}/containers/${encodeURIComponent(name)}/${op}`, {
         method: "POST",
@@ -91,7 +92,7 @@ export default function ContainersPage() {
     } catch (e: any) {
       alert(`Action ${op} sur ${name} a échoué: ${e?.message || e}`);
     } finally {
-      setBusy("");
+      setBusyName("");
       load();
     }
   }
@@ -118,7 +119,7 @@ export default function ContainersPage() {
     return () => clearInterval(id);
   }, []);*/
 
-  async function toggle(name: string, running: boolean) {
+  /*async function toggle(name: string, running: boolean) {
     setBusyName(name);
     try {
       const path = running
@@ -131,7 +132,7 @@ export default function ContainersPage() {
     } finally {
       setBusyName(null);
     }
-  }
+  }*/
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
