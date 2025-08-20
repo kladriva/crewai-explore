@@ -13,13 +13,13 @@ type Item = {
   last_start?: string | null;
 };
 
-function apiBase(): string {
+/*function apiBase(): string {
   // même logique que la page Monitoring : on lit localStorage
   const base =
     localStorage.getItem("apiUrl") ||
     (import.meta.env.PROD ? "/api" : "http://localhost:8000");
   return base.replace(/\/+$/, "");
-}
+}*/
 
 /*async function apiJSON<T>(path: string, opt?: RequestInit): Promise<T> {
   const base = apiBase();
