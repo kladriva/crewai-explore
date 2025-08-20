@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import { useState } from "react";
 import "./App.css";
 import MonitoringConsole from "./MonitoringConsole";
 import ContainersPage from "./ContainersPage";
