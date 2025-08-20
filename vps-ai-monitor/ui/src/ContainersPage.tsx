@@ -5,7 +5,7 @@ type Item = {
   id: string;
   name: string;
   image: string;
-  state: string;            // "running" | "exited" ...
+  state: string;            
   status?: string | null;
   ports: Port[];
   first_deploy: string;
@@ -32,7 +32,7 @@ export default function ContainersPage() {
   const [busyName, setBusyName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  // base API cohérente (évite /api/api)
+
   const rawApiUrl =
     localStorage.getItem("apiUrl") ||
     (import.meta.env.PROD ? "/api" : "http://localhost:8000");

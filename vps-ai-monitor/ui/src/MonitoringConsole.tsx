@@ -15,7 +15,7 @@ type Point = { time: string; value: number };
 type Snapshot = { cpu?: number; mem?: number; disk?: number };
 
 type ActionItem = {
-  ts: number;                                // epoch seconds
+  ts: number;                                
   action: string;
   target?: string;
   outcome?: string;
@@ -93,7 +93,7 @@ function parseTs(v: any): number {
 /* -------------------------------- Component ------------------------------- */
 
 export default function MonitoringConsole() {
-  // Defaults: en prod on passe par Nginx => "/api". En dev: port local 8010
+
   const defaultApi =
     import.meta.env.PROD ? "/api" : "http://localhost:8010/api";
 
@@ -217,9 +217,7 @@ export default function MonitoringConsole() {
   return (
     
       <div className="max-w-6xl mx-auto px-4 content-center py-8 space-y-6">
-        <h1 className="text-5xl font-extrabold tracking-tight text-slate-800 text-center">
-          VPS Monitoring Console
-        </h1>
+
         <h2 className="text-2xl font-semibold text-slate-800">Surveillance des ressources</h2>
 
         {/* Controls */}
