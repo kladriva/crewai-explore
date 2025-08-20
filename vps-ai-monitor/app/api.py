@@ -1,17 +1,20 @@
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, APIRouter
+from app.tools.actions import Actions
 import os, time, asyncio
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
 from .routers.inventory import router as containers_router
 from .routers.actions_log import router as actions_log_router
 
+router = APIRouter()
 app = FastAPI(title="VPS AI Monitor API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
+actions = Actions(rules_path="rules.yaml")
 
 app.include_router(containers_router)
 app.include_router(actions_log_router)
@@ -81,3 +84,11 @@ async def restart_container(payload: dict):
     if p.returncode != 0:
         raise HTTPException(500, p.stderr.strip() or "restart failed")
     return {"result": p.stdout.strip() or "restarted"}
+
+@router.get("/api/containers")
+def api_containers():
+    return {"containers": actions.docker_list()}
+
+@router.post("/api/containers/{name}/{op}")
+def api_container_control(name: str, op: str):
+    return actions.docker_control(name, op)

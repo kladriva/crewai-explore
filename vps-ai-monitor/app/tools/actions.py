@@ -3,9 +3,12 @@ import subprocess
 import shutil
 import shlex
 import logging
-from pathlib import Path
 import yaml
+
+from pathlib import Path
+
 from app.state.audit import log_action
+from datetime import datetime
 
 
 class Actions:
@@ -161,5 +164,88 @@ class Actions:
             msg = f"clear_cache exception: {e}"
             self.logger.exception("clear_cache exception")
             log_action("auto-clear-cache", container, msg, {"path": path})
+            return {"ok": False, "error": str(e)}
+        
+    def _fmt_time(self, s: str | None) -> str | None:
+        if not s or s in ("", "0001-01-01T00:00:00Z"):
+            return None
+        # normalise en ISO court
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).isoformat(timespec="seconds")
+        except Exception:
+            return s
+
+    def docker_list(self) -> list[dict]:
+        """
+        Liste tous les conteneurs avec infos utiles.
+        """
+        out: list[dict] = []
+        try:
+            import docker  # pip install docker
+            cli = docker.from_env()
+            for c in cli.containers.list(all=True):
+                attrs = c.attrs or {}
+                ports_txt: list[str] = []
+                ports = attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
+                for container_port, mappings in ports.items():
+                    if mappings:
+                        for m in mappings:
+                            host_ip = m.get("HostIp", "0.0.0.0")
+                            host_port = m.get("HostPort")
+                            ports_txt.append(f"{host_ip}:{host_port}->{container_port}")
+                    else:
+                        # Port exposé sans mapping
+                        ports_txt.append(f"{container_port}")
+
+                img = (c.image.tags[0] if c.image and c.image.tags else (c.image.short_id if c.image else ""))
+                created = self._fmt_time(attrs.get("Created"))
+                started = self._fmt_time(attrs.get("State", {}).get("StartedAt"))
+                status = (c.status or "").lower()
+                state = "up" if status == "running" else "down"
+
+                out.append({
+                    "name": c.name,
+                    "image": img,
+                    "ports": ports_txt,
+                    "first_deploy": created,
+                    "last_start": started,
+                    "state": state,
+                })
+        except Exception:
+            logging.exception("docker_list failed")
+        return out
+
+    def docker_control(self, name: str, action: str) -> dict:
+        """
+        start/stop/restart un conteneur.
+        """
+        logger = logging.getLogger("actions")
+        try:
+            import docker
+            cli = docker.from_env()
+            c = cli.containers.get(name)
+            if action == "start":
+                c.start()
+                msg = f"start container {name}"
+            elif action == "stop":
+                c.stop()
+                msg = f"stop container {name}"
+            elif action == "restart":
+                c.restart()
+                msg = f"restart container {name}"
+            else:
+                return {"ok": False, "error": f"action inconnue: {action}"}
+
+            # journal d’audit si dispo
+            try:
+                from app.state.audit import log_action
+                log_action(f"AUTO-ACTION {msg}")
+            except Exception:
+                pass
+
+            logger.info(msg)
+            return {"ok": True, "message": msg}
+        except Exception as e:
+            logger.exception("docker_control failed")
             return {"ok": False, "error": str(e)}
 
