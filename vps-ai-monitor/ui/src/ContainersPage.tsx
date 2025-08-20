@@ -21,7 +21,7 @@ function apiBase(): string {
   return base.replace(/\/+$/, "");
 }
 
-async function apiJSON<T>(path: string, opt?: RequestInit): Promise<T> {
+/*async function apiJSON<T>(path: string, opt?: RequestInit): Promise<T> {
   const base = apiBase();
   const url = path.startsWith("/") ? base + path : base + "/" + path;
 
@@ -35,7 +35,7 @@ async function apiJSON<T>(path: string, opt?: RequestInit): Promise<T> {
     throw new Error(`${r.status} ${r.statusText} – ${t}`);
   }
   return r.json();
-}
+}*/
 
 function fmtDate(s?: string | null): string {
   if (!s) return "—";
@@ -56,7 +56,7 @@ export default function ContainersPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Item[]>([]);
   const [busyName, setBusyName] = useState<string | null>(null);
-  
+
 
   const apiUrl = localStorage.getItem("apiUrl") || (import.meta.env.PROD ? "/api" : "http://localhost:8000");
   const apiKey = localStorage.getItem("apiKey") || "";
