@@ -1,9 +1,20 @@
-# app/api.py
+
 from fastapi import FastAPI, HTTPException
 import os, time, asyncio
 import httpx
+from fastapi.middleware.cors import CORSMiddleware
+from .routers.inventory import router as containers_router
+from .routers.actions_log import router as actions_log_router
 
 app = FastAPI(title="VPS AI Monitor API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"],
+)
+
+app.include_router(containers_router)
+app.include_router(actions_log_router)
 
 PROM = os.getenv("PROM_URL", "http://prometheus:9090")
 
