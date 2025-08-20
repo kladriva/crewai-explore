@@ -220,6 +220,7 @@ export default function MonitoringConsole() {
         <h1 className="text-5xl font-extrabold tracking-tight text-slate-800 text-center">
           VPS Monitoring Console
         </h1>
+        <h2 className="text-2xl font-semibold text-slate-800">Surveillance des ressources</h2>
 
         {/* Controls */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">

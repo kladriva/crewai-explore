@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Port = { private: number; public?: number | null; protocol: string };
 type Item = {
   id: string;
   name: string;
   image: string;
-  state: string;            // e.g. "running" | "exited"
-  status?: string | null;   // libre
+  state: string;            // "running" | "exited" ...
+  status?: string | null;
   ports: Port[];
   first_deploy: string;
   last_start?: string | null;
@@ -29,20 +29,19 @@ function badgeClass(state: string): string {
 export default function ContainersPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
-  
   const [busyName, setBusyName] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
-  // --- base API (évite /api/api) -------------------------------------------
+  // base API cohérente (évite /api/api)
   const rawApiUrl =
     localStorage.getItem("apiUrl") ||
     (import.meta.env.PROD ? "/api" : "http://localhost:8000");
-  const apiUrl = rawApiUrl.replace(/\/+$/, ""); // strip trailing slash
+  const apiUrl = rawApiUrl.replace(/\/+$/, "");
   const base = /\/api$/.test(apiUrl) ? apiUrl : `${apiUrl}/api`;
 
   const apiKey = localStorage.getItem("apiKey") || "";
   const headers: HeadersInit = apiKey ? { "X-API-Key": apiKey } : {};
 
-  // --- charge la liste ------------------------------------------------------
   async function load() {
     setLoading(true);
     try {
@@ -59,7 +58,6 @@ export default function ContainersPage() {
     }
   }
 
-  // --- start/stop/restart ---------------------------------------------------
   async function control(name: string, op: "start" | "stop" | "restart") {
     setBusyName(`${name}:${op}`);
     try {
@@ -68,9 +66,7 @@ export default function ContainersPage() {
         { method: "POST", headers }
       );
       const j = await res.json().catch(() => ({}));
-      if (!res.ok || j?.ok === false) {
-        throw new Error(j?.error || res.statusText);
-      }
+      if (!res.ok || j?.ok === false) throw new Error(j?.error || res.statusText);
       await load();
     } catch (e: any) {
       alert(`Action ${op} sur ${name} : ${e?.message || e}`);
@@ -85,19 +81,50 @@ export default function ContainersPage() {
     return () => clearInterval(id);
   }, [base, apiKey]);
 
+  // --- filtrage client ------------------------------------------------------
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((c) => {
+      const inName = c.name.toLowerCase().includes(q);
+      const inImage = (c.image || "").toLowerCase().includes(q);
+      const inPorts =
+        c.ports?.some(
+          (p) =>
+            String(p.public ?? "").includes(q) ||
+            String(p.private).includes(q) ||
+            p.protocol.toLowerCase().includes(q)
+        ) || false;
+      return inName || inImage || inPorts;
+    });
+  }, [items, query]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-2xl font-semibold text-slate-800">Conteneurs Docker</h2>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="rounded-md px-3 py-2 text-sm font-medium
-                     bg-slate-700 text-white hover:bg-slate-600 active:bg-slate-800
-                     disabled:opacity-60"
-        >
-          {loading ? "…" : "Rafraîchir"}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filtrer (nom, image, port...)"
+            className="border rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-sky-400"
+          />
+          <button
+            onClick={load}
+            disabled={loading}
+            className="rounded-md px-3 py-2 text-sm font-medium
+                       text-white hover:bg-slate-600
+                       !bg-emerald-600 text-white
+                        hover:!bg-emerald-500 active:!bg-emerald-700
+                        disabled:!bg-emerald-400 disabled:text-white disabled:opacity-100
+                        disabled:cursor-not-allowed shadow-sm transition-colors
+                       disabled:opacity-60"
+          >
+            {loading ? "…" : "Rafraîchir"}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -114,15 +141,15 @@ export default function ContainersPage() {
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 && !loading && (
+            {filtered.length === 0 && !loading && (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                  Aucun conteneur détecté.
+                  {items.length ? "Aucun résultat pour ce filtre." : "Aucun conteneur détecté."}
                 </td>
               </tr>
             )}
 
-            {items.map((c) => {
+            {filtered.map((c) => {
               const running = c.state.toLowerCase() === "running";
               const ports =
                 c.ports?.length
@@ -147,32 +174,30 @@ export default function ContainersPage() {
                       {running ? "Up" : "Down"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() =>
-                        control(c.name, running ? "stop" : "start")
-                      }
-                      disabled={busyName === `${c.name}:${running ? "stop" : "start"}`}
-                      className={`rounded-md px-3 py-2 text-sm font-medium shadow-sm
-                        ${running
-                          ? "bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white"
-                          : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white"}
-                        disabled:opacity-60`}
-                    >
-                      {busyName?.startsWith(`${c.name}:`)
-                        ? "…"
-                        : running ? "Arrêter" : "Lancer"}
-                    </button>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end items-center gap-2 whitespace-nowrap">
+                      <button
+                        onClick={() => control(c.name, running ? "stop" : "start")}
+                        disabled={busyName === `${c.name}:${running ? "stop" : "start"}`}
+                        className={`inline-flex items-center rounded-md px-3 py-2 text-sm font-medium shadow-sm
+                          ${running
+                            ? "bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white"
+                            : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white"}
+                          disabled:opacity-60`}
+                      >
+                        {busyName?.startsWith(`${c.name}:`) ? "…" : running ? "Arrêter" : "Lancer"}
+                      </button>
 
-                    <button
-                      onClick={() => control(c.name, "restart")}
-                      disabled={busyName === `${c.name}:restart`}
-                      className="ml-2 rounded-md px-3 py-2 text-sm font-medium
-                                 bg-slate-700 hover:bg-slate-600 active:bg-slate-800
-                                 text-white disabled:opacity-60"
-                    >
-                      {busyName === `${c.name}:restart` ? "…" : "Redémarrer"}
-                    </button>
+                      <button
+                        onClick={() => control(c.name, "restart")}
+                        disabled={busyName === `${c.name}:restart`}
+                        className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium
+                                   bg-slate-700 hover:bg-slate-600 active:bg-slate-800
+                                   text-white disabled:opacity-60"
+                      >
+                        {busyName === `${c.name}:restart` ? "…" : "Redémarrer"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
