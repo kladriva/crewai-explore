@@ -54,10 +54,49 @@ function badgeClass(state: string): string {
 export default function ContainersPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<Item[]>([]);
   const [busyName, setBusyName] = useState<string | null>(null);
+  const [busy,   setBusy]   = useState("");
 
+  const apiUrl = localStorage.getItem("apiUrl") || (import.meta.env.PROD ? "/api" : "http://localhost:8000");
+  const apiKey = localStorage.getItem("apiKey") || "";
+  const base   = `${apiUrl}/api`;
+  const headers: HeadersInit = apiKey ? { "X-API-Key": apiKey } : {};
 
   async function load() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${base}/containers`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const j = await res.json();
+      const list = Array.isArray(j) ? j : (j?.containers ?? j?.items ?? []);
+      setData(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.error(e);
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function control(name: string, op: "start" | "stop" | "restart") {
+    setBusy(name + op);
+    try {
+      const res = await fetch(`${base}/containers/${encodeURIComponent(name)}/${op}`, {
+        method: "POST",
+        headers
+      });
+      const j = await res.json();
+      if (!res.ok || j.ok === false) throw new Error(j.error || res.statusText);
+    } catch (e: any) {
+      alert(`Action ${op} sur ${name} a échoué: ${e?.message || e}`);
+    } finally {
+      setBusy("");
+      load();
+    }
+  }
+
+  /*async function load() {
     setLoading(true);
     try {
       const data = await apiJSON<Item[]>("/api/containers");
@@ -65,13 +104,19 @@ export default function ContainersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }*/
 
   useEffect(() => {
     load();
     const id = setInterval(load, 15000);
     return () => clearInterval(id);
-  }, []);
+  }, [base, apiKey]);
+
+  /*useEffect(() => {
+    load();
+    const id = setInterval(load, 15000);
+    return () => clearInterval(id);
+  }, []);*/
 
   async function toggle(name: string, running: boolean) {
     setBusyName(name);
@@ -152,15 +197,21 @@ export default function ContainersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => toggle(c.name, running)}
-                      disabled={busyName === c.name}
-                      className={`rounded-md px-3 py-2 text-sm font-medium shadow-sm
-                                 ${running
-                                   ? "bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white"
-                                   : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white"}
-                                 disabled:opacity-60`}
-                    >
-                      {busyName === c.name ? "…" : running ? "Arrêter" : "Lancer"}
+                        onClick={() => control(c.name, c.state.toLowerCase() === "running" ? "stop" : "start")}
+                        disabled={busyName === `${c.name}:${c.state.toLowerCase() === "running" ? "stop" : "start"}`}
+                        className={`rounded-md px-3 py-2 text-sm font-medium shadow-sm
+                            ${c.state.toLowerCase() === "running"
+                            ? "bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white"
+                            : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white"}
+                            disabled:opacity-60`}
+                        >
+                        {busyName?.startsWith(c.name + ":") ? "…" : (c.state.toLowerCase() === "running" ? "Arrêter" : "Lancer")}                                                                   
+                    </button>
+                    <button onClick={() => control(c.name, "restart")}
+                        disabled={busyName === `${c.name}:restart`}
+                        className="ml-2 rounded-md px-3 py-2 text-sm font-medium bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white disabled:opacity-60"
+                        >
+                        {busyName === `${c.name}:restart` ? "…" : "Redémarrer"}
                     </button>
                   </td>
                 </tr>
