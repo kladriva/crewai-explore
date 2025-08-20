@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type Port = { private: number; public?: number | null; protocol: string };
 type Item = {
@@ -55,7 +55,7 @@ export default function ContainersPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyName, setBusyName] = useState<string | null>(null);
-  
+
 
   async function load() {
     setLoading(true);
