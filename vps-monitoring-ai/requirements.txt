@@ -1,0 +1,53 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# CrewAI & LLM
+crewai==0.28.8
+crewai-tools==0.2.6
+openai==1.10.0
+langchain==0.1.4
+langchain-openai==0.0.5
+
+# gRPC & Communication
+grpcio==1.60.0
+grpcio-tools==1.60.0
+websockets==12.0
+
+# Databases
+mysql-connector-python==8.3.0
+SQLAlchemy==2.0.25
+influxdb-client==1.39.0
+redis==5.0.1
+
+# Monitoring & Metrics
+docker==7.0.0
+psutil==5.9.8
+prometheus-client==0.19.0
+
+# Machine Learning
+scikit-learn==1.4.0
+tensorflow==2.15.0
+numpy==1.26.3
+pandas==2.1.4
+joblib==1.3.2
+
+# Message Queue
+pika==1.3.2
+
+# Alerting
+python-telegram-bot==20.8
+aiosmtplib==3.0.1
+
+# Auth & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Utilities
+python-dotenv==1.0.0
+httpx==0.26.0
+loguru==0.7.2
+schedule==1.2.0

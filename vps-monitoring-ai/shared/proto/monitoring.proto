@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package monitoring;
+
+// Service definition for Master-Slave communication
+service MonitoringService {
+    // Slave sends metrics to master
+    rpc SendMetrics(MetricsRequest) returns (MetricsResponse);
+    
+    // Slave sends heartbeat
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    
+    // Master sends action command to slave
+    rpc ExecuteAction(ActionRequest) returns (ActionResponse);
+    
+    // Stream real-time metrics
+    rpc StreamMetrics(stream MetricsRequest) returns (stream MetricsResponse);
+}
+
+// Node information
+message NodeInfo {
+    string node_id = 1;
+    string ip_address = 2;
+    string hostname = 3;
+    string os_type = 4;
+    string os_version = 5;
+    string agent_version = 6;
+}
+
+// System metrics
+message SystemMetrics {
+    double cpu_percent = 1;
+    double memory_percent = 2;
+    double memory_used_mb = 3;
+    double memory_total_mb = 4;
+    double disk_percent = 5;
+    double disk_used_gb = 6;
+    double disk_total_gb = 7;
+    int64 timestamp = 8;
+}
+
+// Container metrics
+message ContainerMetrics {
+    string container_id = 1;
+    string container_name = 2;
+    string image = 3;
+    string status = 4;
+    double cpu_percent = 5;
+    double memory_percent = 6;
+    double memory_used_mb = 7;
+    double memory_limit_mb = 8;
+    double network_rx_mb = 9;
+    double network_tx_mb = 10;
+    repeated string ports = 11;
+    int64 created_at = 12;
+    int64 timestamp = 13;
+}
+
+// Metrics request from slave to master
+message MetricsRequest {
+    NodeInfo node_info = 1;
+    SystemMetrics system_metrics = 2;
+    repeated ContainerMetrics containers = 3;
+    int64 timestamp = 4;
+}
+
+// Response from master
+message MetricsResponse {
+    bool success = 1;
+    string message = 2;
+    int64 timestamp = 3;
+}
+
+// Heartbeat request
+message HeartbeatRequest {
+    NodeInfo node_info = 1;
+    int64 timestamp = 2;
+    bool is_healthy = 3;
+}
+
+// Heartbeat response
+message HeartbeatResponse {
+    bool success = 1;
+    string message = 2;
+    int64 next_heartbeat_interval = 3;  // seconds
+}
+
+// Action types
+enum ActionType {
+    RESTART_CONTAINER = 0;
+    STOP_CONTAINER = 1;
+    START_CONTAINER = 2;
+    CLEAR_CACHE = 3;
+    DISK_CLEANUP = 4;
+    RESTART_SERVICE = 5;
+}
+
+// Action request from master to slave
+message ActionRequest {
+    string action_id = 1;
+    ActionType action_type = 2;
+    string target_container_id = 3;
+    string reason = 4;
+    bool dry_run = 5;
+    int64 timestamp = 6;
+}
+
+// Action execution response
+message ActionResponse {
+    string action_id = 1;
+    bool success = 2;
+    string message = 3;
+    double execution_time = 4;  // seconds
+    string error_message = 5;
+    int64 timestamp = 6;
+}

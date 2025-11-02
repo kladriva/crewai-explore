@@ -10,3 +10,12 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:9100']
 
+  - job_name: 'node_exporter_clients'
+    static_configs:
+      - targets: ['100.64.1.10:9100']
+        labels: { alias: 'srv-par-01', role: 'client' }
+      - targets: ['198.51.100.22:9100']
+        labels: { alias: 'srv-nyc-02', role: 'client' }
+      - targets: ['127.0.0.1:19100']
+        labels: { alias: 'srv-ssh-03', role: 'client' }
+
