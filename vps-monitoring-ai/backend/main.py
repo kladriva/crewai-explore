@@ -80,6 +80,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Routers
+try:
+    from backend.routers.auth import router as auth_router
+    app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+except Exception as e:
+    logger.warning(f"Auth router not loaded: {e}")
+
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
