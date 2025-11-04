@@ -81,11 +81,9 @@ app = FastAPI(
 )
 
 # Routers
-try:
-    from backend.routers.auth import router as auth_router
-    app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
-except Exception as e:
-    logger.warning(f"Auth router not loaded: {e}")
+from backend.routers.auth import router as auth_router
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+logger.info("Auth router mounted at /api/v1/auth")
 
 # CORS Middleware
 app.add_middleware(
