@@ -15,6 +15,7 @@ const Nodes: React.FC = () => {
   const queryClient = useQueryClient();
   const { permissions } = useAuthStore();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const { data: nodes, isLoading } = useQuery({
     queryKey: ['nodes'],
@@ -78,6 +79,91 @@ const Nodes: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">No nodes configured yet</p>
         </div>
       )}
+
+      {showAddModal && (
+        <AddNodeModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={() => {
+            setShowAddModal(false);
+            queryClient.invalidateQueries({ queryKey: ['nodes'] });
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+const AddNodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
+  const [name, setName] = React.useState('');
+  const [ip, setIp] = React.useState('');
+  const [nodeType, setNodeType] = React.useState<'master' | 'slave'>('slave');
+  const [osType, setOsType] = React.useState('');
+  const [osVersion, setOsVersion] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await nodesApi.create({
+        name,
+        ip_address: ip,
+        node_type: nodeType,
+        os_type: osType || undefined,
+        os_version: osVersion || undefined,
+      } as any);
+      onCreated();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || 'Failed to create node');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Node</h3>
+          <button className="text-gray-400 hover:text-gray-600" onClick={onClose}>✕</button>
+        </div>
+        {error && (
+          <div className="mb-3 text-sm text-red-600">{error}</div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-600 dark:text-gray-300">Name</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 bg-white dark:bg-gray-700" value={name} onChange={e=>setName(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 dark:text-gray-300">IP Address</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 bg-white dark:bg-gray-700" value={ip} onChange={e=>setIp(e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-600 dark:text-gray-300">Node Type</label>
+              <select className="mt-1 w-full rounded border px-3 py-2 bg-white dark:bg-gray-700" value={nodeType} onChange={e=>setNodeType(e.target.value as any)}>
+                <option value="slave">Slave</option>
+                <option value="master">Master</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 dark:text-gray-300">OS</label>
+              <input className="mt-1 w-full rounded border px-3 py-2 bg-white dark:bg-gray-700" value={osType} onChange={e=>setOsType(e.target.value)} placeholder="Ubuntu" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 dark:text-gray-300">OS Version</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 bg-white dark:bg-gray-700" value={osVersion} onChange={e=>setOsVersion(e.target.value)} placeholder="22.04" />
+          </div>
+          <div className="flex justify-end space-x-3 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">Cancel</button>
+            <button disabled={submitting} type="submit" className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{submitting ? 'Creating...' : 'Create'}</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };
