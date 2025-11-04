@@ -33,4 +33,5 @@ def list_nodes(db: Session = Depends(get_db), active: Optional[bool] = Query(Non
     if active is not None:
         q = q.filter(Node.is_active == active)
     nodes = q.order_by(Node.id.desc()).all()
-    return {"items": [node_to_dict(n) for n in nodes], "total": len(nodes)}
+    # Frontend expects an array of nodes
+    return [node_to_dict(n) for n in nodes]

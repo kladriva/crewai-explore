@@ -39,6 +39,6 @@ def list_actions(
     q = db.query(Action)
     if status is not None:
         q = q.filter(Action.status == status)
-    total = q.count()
     rows = q.order_by(Action.created_at.desc()).offset(offset).limit(limit).all()
-    return {"items": [action_to_dict(a) for a in rows], "total": total}
+    # Frontend expects an array of actions
+    return [action_to_dict(a) for a in rows]

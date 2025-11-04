@@ -40,6 +40,6 @@ def list_alerts(
     q = db.query(Alert)
     if is_resolved is not None:
         q = q.filter(Alert.is_resolved == is_resolved)
-    total = q.count()
     rows = q.order_by(Alert.created_at.desc()).offset(offset).limit(limit).all()
-    return {"items": [alert_to_dict(a) for a in rows], "total": total}
+    # Frontend expects an array of alerts
+    return [alert_to_dict(a) for a in rows]
