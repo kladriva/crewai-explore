@@ -169,7 +169,8 @@ class MLModel(Base):
     training_samples = Column(Integer, nullable=True)
     is_active = Column(Boolean, default=False)
     trained_at = Column(DateTime, default=datetime.utcnow)
-    metadata = Column(JSON, nullable=True)
+    # 'metadata' attribute name is reserved by SQLAlchemy; use different attribute name but keep column name 'metadata'
+    model_metadata = Column("metadata", JSON, nullable=True)
     
     def __repr__(self):
         return f"<MLModel {self.model_name} v{self.version}>"
