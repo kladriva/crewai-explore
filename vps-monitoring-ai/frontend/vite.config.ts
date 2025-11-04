@@ -18,5 +18,5 @@ import react from '@vitejs/plugin-react';
   },
 }); */
 export default defineConfig({
-    server: { host: '0.0.0.0', port: 3000, hmr: { host: '<IP_VPS>', port: 3000 } }
+    server: { host: '0.0.0.0', port: 3000, hmr: { host: '109.199.102.139', port: 3000 } }
   })
