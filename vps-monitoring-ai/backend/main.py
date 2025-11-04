@@ -82,8 +82,17 @@ app = FastAPI(
 
 # Routers
 from backend.routers.auth import router as auth_router
+from backend.routers.nodes import router as nodes_router
+from backend.routers.alerts import router as alerts_router
+from backend.routers.actions import router as actions_router
+from backend.routers.dashboard import router as dashboard_router
+
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
-logger.info("Auth router mounted at /api/v1/auth")
+app.include_router(nodes_router, prefix="/api/v1", tags=["Nodes"])
+app.include_router(alerts_router, prefix="/api/v1", tags=["Alerts"])
+app.include_router(actions_router, prefix="/api/v1", tags=["Actions"])
+app.include_router(dashboard_router, prefix="/api/v1", tags=["Dashboard"])
+logger.info("Routers mounted: /api/v1/auth, /api/v1/nodes, /api/v1/alerts, /api/v1/actions, /api/v1/dashboard")
 
 # CORS Middleware
 app.add_middleware(
