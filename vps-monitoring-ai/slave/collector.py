@@ -86,32 +86,46 @@ class MetricsCollector:
                 try:
                     stats = container.stats(stream=False)
                     
-                    # Calculate CPU percentage
-                    cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - \
-                                stats['precpu_stats']['cpu_usage']['total_usage']
-                    system_delta = stats['cpu_stats']['system_cpu_usage'] - \
-                                   stats['precpu_stats']['system_cpu_usage']
-                    cpu_percent = 0.0
-                    if system_delta > 0:
-                        cpu_percent = (cpu_delta / system_delta) * len(stats['cpu_stats']['cpu_usage']['percpu_usage']) * 100.0
+                    # Calculate CPU percentage robustly (handle missing precpu/percpu)
+                    cpu_stats = stats.get('cpu_stats', {}) or {}
+                    precpu_stats = stats.get('precpu_stats', {}) or {}
+                    cpu_usage = cpu_stats.get('cpu_usage', {}) or {}
+                    precpu_usage = precpu_stats.get('cpu_usage', {}) or {}
+                    total = cpu_usage.get('total_usage', 0) or 0
+                    pre_total = precpu_usage.get('total_usage', 0) or 0
+                    system_total = cpu_stats.get('system_cpu_usage', 0) or 0
+                    pre_system_total = precpu_stats.get('system_cpu_usage', 0) or 0
+                    # number of CPUs
+                    ncpu = (len(cpu_usage.get('percpu_usage') or [])
+                            or cpu_stats.get('online_cpus')
+                            or psutil.cpu_count()
+                            or 1)
+                    cpu_delta = max(total - pre_total, 0)
+                    system_delta = max(system_total - pre_system_total, 0)
+                    cpu_percent = (cpu_delta / system_delta * ncpu * 100.0) if system_delta > 0 else 0.0
                     
                     # Calculate Memory
-                    memory_usage = stats['memory_stats'].get('usage', 0)
-                    memory_limit = stats['memory_stats'].get('limit', 1)
+                    mem_stats = stats.get('memory_stats', {}) or {}
+                    memory_usage = mem_stats.get('usage', 0) or 0
+                    memory_limit = mem_stats.get('limit', 1) or 1
                     memory_percent = (memory_usage / memory_limit) * 100 if memory_limit > 0 else 0
                     memory_used_mb = memory_usage / (1024 * 1024)
                     memory_limit_mb = memory_limit / (1024 * 1024)
                     
                     # Network
-                    networks = stats.get('networks', {})
-                    network_rx = sum(net['rx_bytes'] for net in networks.values()) / (1024 * 1024)
-                    network_tx = sum(net['tx_bytes'] for net in networks.values()) / (1024 * 1024)
+                    networks = stats.get('networks', {}) or {}
+                    try:
+                        network_rx = sum((net.get('rx_bytes', 0) or 0) for net in networks.values()) / (1024 * 1024)
+                        network_tx = sum((net.get('tx_bytes', 0) or 0) for net in networks.values()) / (1024 * 1024)
+                    except Exception:
+                        network_rx = 0.0
+                        network_tx = 0.0
                     
                     # Container info
                     container_info = {
                         "container_id": container.id[:12],
                         "container_name": container.name,
-                        "image": container.image.tags[0] if container.image.tags else "unknown",
+                        "image": (container.image.tags[0] if container.image.tags else "unknown"),
                         "status": container.status,
                         "cpu_percent": round(cpu_percent, 2),
                         "memory_percent": round(memory_percent, 2),
