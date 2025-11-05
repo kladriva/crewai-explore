@@ -8,7 +8,7 @@ import psutil
 import docker
 import socket
 import platform
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any
 import logging
 
@@ -33,6 +33,8 @@ class MetricsCollector:
     def __init__(self):
         self.docker_client = None
         try:
+            if os.getenv('DOCKER_DISABLED', '0') == '1':
+                raise RuntimeError('Docker disabled via DOCKER_DISABLED=1')
             self.docker_client = docker.from_env()
             logger.info("Docker client initialized")
         except Exception as e:
@@ -64,7 +66,7 @@ class MetricsCollector:
                 "disk_percent": disk_percent,
                 "disk_used_gb": disk_used_gb,
                 "disk_total_gb": disk_total_gb,
-                "timestamp": int(datetime.utcnow().timestamp() * 1000)
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
             }
         except Exception as e:
             logger.error(f"Error collecting system metrics: {e}")
@@ -119,7 +121,7 @@ class MetricsCollector:
                         "network_tx_mb": round(network_tx, 2),
                         "ports": [f"{k}/{v}" for k, v in (container.ports or {}).items()],
                         "created_at": int(datetime.fromisoformat(container.attrs['Created'].replace('Z', '+00:00')).timestamp() * 1000),
-                        "timestamp": int(datetime.utcnow().timestamp() * 1000)
+                        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
                     }
                     
                     containers_metrics.append(container_info)
@@ -199,7 +201,7 @@ def main():
                 "node_info": node_info,
                 "system_metrics": system_metrics,
                 "containers": containers_metrics,
-                "timestamp": int(datetime.utcnow().timestamp() * 1000)
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
             }
             
             # Send to master

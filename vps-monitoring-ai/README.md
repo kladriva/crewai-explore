@@ -237,23 +237,23 @@ Interface inspirée de Grafana avec :
 |-----------|-------------|------|
 | Framework | **FastAPI** | API REST + WebSocket |
 | AI Agents | **CrewAI 0.28** | Orchestration multi-agents |
-| LLM | **OpenAI GPT-4** | Intelligence des agents |
-| gRPC | **grpcio** | Communication Master-Slave |
-| ML | **Scikit-learn, TensorFlow** | Anomaly Detection |
-| DB SQL | **MySQL + SQLAlchemy** | Metadata, Users, Audit |
+| LLM       | **OpenAI GPT-4** | Intelligence des agents |
+| gRPC      | **grpcio** | Communication Master-Slave |
+| ML        | **Scikit-learn, TensorFlow** | Anomaly Detection |
+| DB SQL    | **MySQL + SQLAlchemy** | Metadata, Users, Audit |
 | DB Time-Series | **InfluxDB** | Métriques haute fréquence |
-| Cache | **Redis** | Sessions, rate limiting |
-| Queue | **RabbitMQ** | Actions asynchrones |
+| Cache     | **Redis** | Sessions, rate limiting |
+| Queue     | **RabbitMQ** | Actions asynchrones |
 
 ### Frontend (React)
 
 | Composant | Technologie | Rôle |
 |-----------|-------------|------|
 | Framework | **React 18 + TypeScript** | UI moderne |
-| Charts | **Recharts** | Graphiques temps réel |
-| Styling | **Tailwind CSS** | Design system |
-| State | **React Query** | Data fetching |
-| Auth | **JWT + Context API** | Authentification |
+| Charts    | **Recharts** | Graphiques temps réel |
+| Styling   | **Tailwind CSS** | Design system |
+| State     | **React Query** | Data fetching |
+| Auth      | **JWT + Context API** | Authentification |
 | WebSocket | **Socket.io-client** | Temps réel |
 
 ### DevOps
@@ -360,25 +360,34 @@ JWT_SECRET_KEY=generate-a-random-32-char-key
 #### C. Générer protobuf gRPC
 
 ```bash
-cd shared/proto
-python -m grpc_tools.protoc -I. --python_out=../../backend/grpc_gen --grpc_python_out=../../backend/grpc_gen monitoring.proto
+pip install -U "setuptools<81" grpcio-tools protobuf
+mkdir -p backend/grpc_gen && touch backend/grpc_gen/__init__.py
+python -m grpc_tools.protoc -I shared/proto \
+  --python_out=backend/grpc_gen \
+  --grpc_python_out=backend/grpc_gen \
+  shared/proto/monitoring.proto
 ```
 
 #### D. Initialiser les bases de données
 
 ```bash
 # MySQL
-mysql -u root -p
+# Option 1
+sudo apt-get update && sudo apt-get install -y mysql-server && sudo systemctl enable --now mysql && sudo systemctl status mysql && journalctl -u mysql --no-pager
+mysql -h 127.0.0.1 -P 3306 -u root -p; puis initialise: mysql -h 127.0.0.1 -u root -p -e "CREATE DATABASE vps_monitoring; CREATE USER 'vps'@'%' IDENTIFIED BY 'StrongPass!'; GRANT ALL PRIVILEGES ON vps_monitoring.* TO 'vps'@'%'; FLUSH PRIVILEGES;"
+# Option 2 (Docker)
+docker run -d --name mysql -e MYSQL_ROOT_PASSWORD=RootPass! -e MYSQL_DATABASE=vps_monitoring -p 3306:3306 -v mysql-data:/var/lib/mysql mysql:8.0
+
 CREATE DATABASE vps_monitoring CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'monitoring_user'@'localhost' IDENTIFIED BY 'SecurePassword123!';
-GRANT ALL PRIVILEGES ON vps_monitoring.* TO 'monitoring_user'@'localhost';
+CREATE USER 'monitoring_admin'@'localhost' IDENTIFIED BY 'Admin-Vps!!!';
+GRANT ALL PRIVILEGES ON vps_monitoring.* TO 'monitoring_admin'@'localhost';
 FLUSH PRIVILEGES;
 exit;
 
 # InfluxDB (via UI ou CLI)
 influx setup \
   --username admin \
-  --password SecurePassword123! \
+  --password Admin-Vps!!! \
   --org vps-monitoring \
   --bucket metrics \
   --force
@@ -393,10 +402,20 @@ python -c "from backend.database.connection import init_database; init_database(
 #### F. Créer un utilisateur admin
 
 ```bash
-python scripts/create_admin_user.py \
-  --username admin \
-  --email admin@example.com \
-  --password YourSecurePassword
+export ADMIN_PASS='Admin-Vps!!!'
+python - <<'PY'
+from backend.database.connection import get_db_context
+from backend.database.models import User, UserRole
+from passlib.context import CryptContext
+from datetime import datetime
+import os
+pwd_raw = os.environ['ADMIN_PASS'][:72]
+pwd = CryptContext(schemes=['bcrypt'], deprecated='auto').hash(pwd_raw)
+with get_db_context() as db:
+    u = User(username='admin', email='rodriguekongne@gmail.com', hashed_password=pwd,
+             role=UserRole.ADMIN, is_active=True, created_at=datetime.utcnow())
+    db.add(u); db.commit(); db.refresh(u); print('Created admin id:', u.id)
+PY
 ```
 
 ### 3. Configuration Frontend
