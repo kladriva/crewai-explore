@@ -24,7 +24,7 @@ pip install --upgrade pip
 pip install --no-cache-dir psutil docker
 
 # Service systemd
-sudo tee /etc/systemd/system/vps-collector.service >/dev/null <<EOF
+sudo tee /etc/systemd/system/vps-collector.service >/dev/null <<'EOF'
 [Unit]
 Description=VPS Monitoring Metrics Collector
 After=network-online.target
@@ -32,14 +32,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${USER}
+User=%i
 WorkingDirectory=/opt/monitoring
-Environment=NODE_NAME=${NODE_NAME}
-Environment=MASTER_HOST=${MASTER_HOST}
-Environment=MASTER_PORT=${MASTER_PORT}
+Environment=NODE_NAME=prod-web-01
+Environment=MASTER_HOST=109.199.102.139
+Environment=MASTER_PORT=50051
 Environment=COLLECTION_INTERVAL=5
 Environment=HEARTBEAT_INTERVAL=30
-Environment=DOCKER_DISABLED=${DOCKER_DISABLED}
+Environment=DOCKER_DISABLED=0
 ExecStart=/opt/monitoring/.venv/bin/python /opt/monitoring/collector.py
 Restart=always
 RestartSec=5
@@ -47,8 +47,6 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Démarrage
-sudo systemctl daemon-reload
-sudo systemctl enable --now vps-collector
-sudo systemctl status vps-collector --no-pager
+sudo systemd-analyze verify /etc/systemd/system/vps-collector.service || true
+sudo systemctl daemon-reload && sudo systemctl enable --now vps-collector
+sudo systemctl status vps-collector --no-pager || journalctl -u vps-collector -n 100 --no-pager
